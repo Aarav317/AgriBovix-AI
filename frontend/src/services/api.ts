@@ -15,13 +15,16 @@ export class ApiError extends Error {
     super(message);
   }
 }
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.PROD ? "https://agribovix-ai.onrender.com" : "")
+).replace(/\/+$/, "");
 export async function request<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${(import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "")}/api${path}`, {
+    response = await fetch(`${apiBaseUrl}/api${path}`, {
       ...init,
       credentials: "include",
       headers: {
@@ -46,15 +49,40 @@ export async function request<T>(
       "Cannot reach the server. Check that the Python backend is running, then try again.",
     );
   }
+  const body = await response.text();
+  let data: { detail?: { code?: string; message?: string } } = {};
+  if (body) {
+    try {
+      data = JSON.parse(body);
+    } catch {
+      if (response.ok) {
+        throw new ApiError(
+          response.status,
+          "invalid_server_response",
+          "The API returned a non-JSON response. Check VITE_API_BASE_URL in your Render static site settings.",
+        );
+      }
+    }
+  } else if (response.ok && response.status !== 204) {
+    throw new ApiError(
+      response.status,
+      "empty_server_response",
+      "The API returned an empty response. Check that the Render backend URL and API route are configured correctly.",
+    );
+  }
   if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
     throw new ApiError(
       response.status,
       data.detail?.code || "request_failed",
-      data.detail?.message || "Something went wrong. Please try again.",
+      data.detail?.message || `The server request failed (HTTP ${response.status}). Check your Render backend URL and service logs.`,
     );
   }
-  return response.status === 204 ? (undefined as T) : response.json();
+  if (response.status === 204) return undefined as T;
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    throw new ApiError(response.status, "invalid_server_response", "The API returned invalid JSON. Check the deployed backend response.");
+  }
 }
 export const api = {
   health: () => request<Health>("/health"),
