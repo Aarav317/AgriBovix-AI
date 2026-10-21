@@ -5,6 +5,7 @@ import secrets
 import time
 from fastapi import HTTPException, Request, Response
 from app.database.store import connection
+from app.config import cookie_same_site
 
 COOKIE = 'agribovix_session'
 SESSION_SECONDS = 7 * 24 * 3600
@@ -27,7 +28,9 @@ def start_session(response: Response, user_id):
     with connection() as db:
         db.execute('DELETE FROM sessions WHERE expires_at < ?', (int(time.time()),))
         db.execute('INSERT INTO sessions VALUES (?,?,?)', (token_hash(token), user_id, int(time.time()) + SESSION_SECONDS))
-    response.set_cookie(COOKIE, token, max_age=SESSION_SECONDS, httponly=True, secure=os.getenv('COOKIE_SECURE','false').lower() == 'true', samesite='lax', path='/')
+    same_site = cookie_same_site()
+    secure = os.getenv('COOKIE_SECURE','false').lower() == 'true' or same_site == 'none'
+    response.set_cookie(COOKIE, token, max_age=SESSION_SECONDS, httponly=True, secure=secure, samesite=same_site, path='/')
 
 def current_user(request: Request):
     token = request.cookies.get(COOKIE, '')
