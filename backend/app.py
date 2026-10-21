@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from app.config import WORKSPACES, allowed_origins, provider_configured
 from app.database.store import initialize
 from app.routes import auth, workspaces
@@ -13,6 +14,13 @@ async def lifespan(application):
     yield
 
 application = FastAPI(title='AgriBovix AI', version='1.0.0', lifespan=lifespan)
+application.add_middleware(
+    CORSMiddleware,
+    allow_origins=sorted(allowed_origins()),
+    allow_credentials=True,
+    allow_methods=['GET', 'POST', 'DELETE', 'OPTIONS'],
+    allow_headers=['Content-Type'],
+)
 
 @application.middleware('http')
 async def security_headers(request: Request, call_next):
@@ -20,8 +28,6 @@ async def security_headers(request: Request, call_next):
         origin = request.headers.get('origin')
         if origin and origin not in allowed_origins():
             return JSONResponse(status_code=403,content={'detail':{'code':'origin_rejected','message':'This request origin is not allowed.'}})
-        if request.headers.get('sec-fetch-site') == 'cross-site':
-            return JSONResponse(status_code=403,content={'detail':{'code':'origin_rejected','message':'Cross-site changes are not allowed.'}})
     response = await call_next(request)
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
