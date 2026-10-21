@@ -30,7 +30,14 @@ def gemini_model(workspace):
     return os.getenv(f'{workspace.upper()}_GEMINI_MODEL', os.getenv('GEMINI_MODEL', 'gemini-3.5-flash-lite')).strip()
 
 def allowed_origins():
-    return {os.getenv('FRONTEND_ORIGIN', 'http://127.0.0.1:3000'), 'http://localhost:3000', 'http://127.0.0.1:4173', 'http://localhost:4173'}
+    configured = os.getenv('FRONTEND_ORIGIN', 'http://127.0.0.1:3000')
+    return {origin.strip().rstrip('/') for origin in configured.split(',') if origin.strip()} | {
+        'http://localhost:3000', 'http://127.0.0.1:4173', 'http://localhost:4173'
+    }
+
+def cookie_same_site():
+    value = os.getenv('COOKIE_SAMESITE', 'lax').strip().lower()
+    return value if value in {'lax', 'strict', 'none'} else 'lax'
 
 WORKSPACES = ('agrivision', 'pashuvision')
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
